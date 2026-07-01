@@ -1,87 +1,130 @@
 import usermodel from "../model/userModel.js";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs"
+import transporter from "../config/nodemailer.js"
+import "dotenv/config"
 
 export const registered = async (req, res) => {
-    const { name, email, password } = req.body
+    const { name, email, password } = req.body;
 
     if (!name || !email || !password) {
-        return res.json({ success: false, message: "Missing Details" })
-
+        return res.json({ success: false, message: "Missing Details" });
     }
 
     try {
+        const ExistingUser = await usermodel.findOne({ email });
 
-        const ExistingUser = await usermodel.findOne({ email })
         if (ExistingUser) {
-            res.json({ success: false, message: "User already Exists" })
+            return res.json({ success: false, message: "User already Exists" });
         }
 
-        const HashedPassword = await bcrypt.hash(password, 10)
+        const HashedPassword = await bcrypt.hash(password, 10);
 
-        const user = new usermodel({ name, email, password: HashedPassword })
+        const user = new usermodel({
+            name,
+            email,
+            password: HashedPassword
+        });
 
-        await user.save()
+        await user.save();
 
-        const token = jwt.sign({ id: user._id }, process.env.secretKey, { expiresIn: '7d' })
+        const token = jwt.sign(
+            { id: user._id },
+            process.env.secretKey,
+            { expiresIn: '7d' }
+        );
 
-        res.cookie('token', token, {
+        res.cookie('token', {
             httpOnly: true,
             secure: process.env.NODE_ENV === "production",
             sameSite: process.env.NODE_ENV === "production" ? 'none' : 'strict',
             maxAge: 7 * 24 * 60 * 60 * 1000
-        })
+        });
 
-        res.json({ success: true })
+        await transporter.sendMail({
+            from: process.env.SMTP_EMAIL,
+            to: email,
+            subject: "Welcome",
+            text: "Hello! Welcome to my application."
+        });
+
+       
+        return res.json({ success: true });
+
     } catch (error) {
-        return res.json({ success: false, message: error.message })
+        return res.json({ success: false, message: error.message });
     }
-}
+};
 
 
 export const Login = async (req, res) => {
-    const { email, password } = req.body
+    const { email, password } = req.body;
 
     if (!email || !password) {
-        return res.json({ success: false, message: "Missing Details" })
-
+        return res.json({
+            success: false,
+            message: "Missing Details"
+        });
     }
 
     try {
+        const ExistingUser = await usermodel.findOne({ email });
 
-        const ExistingUser = await usermodel.findOne({ email })
-        if (ExistingUser) {
-            res.json({ success: false, message: "User not Found" })
+        if (!ExistingUser) {
+            return res.json({
+                success: false,
+                message: "User not Found"
+            });
         }
 
-        const isMatched = await bcrypt.compare(password, ExistingUser.password)
+        const isMatched = await bcrypt.compare(
+            password,
+            ExistingUser.password
+        );
 
         if (!isMatched) {
-
-            return res.json({ success: false, message: "invalid password" })
+            return res.json({
+                success: false,
+                message: "Invalid password"
+            });
         }
 
+        const token = jwt.sign(
+            { id: ExistingUser._id },
+            process.env.secretKey,
+            { expiresIn: "7d" }
+        );
 
-        const token = jwt.sign({ id: user._id }, process.env.secretKey, { expiresIn: '7d' })
-
-        res.cookie('token', token, {
+        res.cookie("token", {
             httpOnly: true,
             secure: process.env.NODE_ENV === "production",
-            sameSite: process.env.NODE_ENV === "production" ? 'none' : 'strict',
+            sameSite:
+                process.env.NODE_ENV === "production"
+                    ? "none"
+                    : "strict",
             maxAge: 7 * 24 * 60 * 60 * 1000
-        })
+        });
 
-        res.json({ success: true })
+        return res.json({
+            success: true
+        });
     } catch (error) {
-        return res.json({ success: false, message: error.message })
+        return res.json({
+            success: false,
+            message: error.message
+        });
     }
-}
+};
+
+
+
+
 export const Logout = async (req, res) => {
 
 
     try {
 
-        res.clearCookie('token', token, {
+        res.clearCookie('token', {
             httpOnly: true,
             secure: process.env.NODE_ENV === "production",
             sameSite: process.env.NODE_ENV === "production" ? 'none' : 'strict',
